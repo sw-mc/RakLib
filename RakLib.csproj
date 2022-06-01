@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net6.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <Content Include=".git\config" />
+      <Content Include=".git\description" />
+      <Content Include=".git\FETCH_HEAD" />
+      <Content Include=".git\HEAD" />
+      <Content Include=".git\hooks\applypatch-msg.sample" />
+      <Content Include=".git\hooks\commit-msg.sample" />
+      <Content Include=".git\hooks\fsmonitor-watchman.sample" />
+      <Content Include=".git\hooks\post-update.sample" />
+      <Content Include=".git\hooks\pre-applypatch.sample" />
+      <Content Include=".git\hooks\pre-commit.sample" />
+      <Content Include=".git\hooks\pre-merge-commit.sample" />
+      <Content Include=".git\hooks\pre-push.sample" />
+      <Content Include=".git\hooks\pre-rebase.sample" />
+      <Content Include=".git\hooks\pre-receive.sample" />
+      <Content Include=".git\hooks\prepare-commit-msg.sample" />
+      <Content Include=".git\hooks\push-to-checkout.sample" />
+      <Content Include=".git\hooks\update.sample" />
+      <Content Include=".git\index" />
+      <Content Include=".git\info\exclude" />
+      <Content Include=".git\logs\HEAD" />
+      <Content Include=".git\logs\refs\heads\stable" />
+      <Content Include=".git\logs\refs\remotes\origin\HEAD" />
+      <Content Include=".git\objects\03\0599e80b3547d18a14167d220a584335e2b892" />
+      <Content Include=".git\objects\15\69f7a15bce91edd7db3cec2a61b0b30cbaf517" />
+      <Content Include=".git\objects\b9\f70c5073c2fdf32c0617546716604dfe2e8ce5" />
+      <Content Include=".git\objects\d8\09ef4dbd994d57462890b09b27c5fa29bbc908" />
+      <Content Include=".git\objects\pack\pack-25c0bea86108dd2d640f5f270082c2e76fbbafb6.idx" />
+      <Content Include=".git\objects\pack\pack-25c0bea86108dd2d640f5f270082c2e76fbbafb6.pack" />
+      <Content Include=".git\packed-refs" />
+      <Content Include=".git\refs\heads\stable" />
+      <Content Include=".git\refs\remotes\origin\HEAD" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Folder Include=".git\objects\info" />
+      <Folder Include=".git\refs\tags" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\Binary\Binary.csproj" />
+    </ItemGroup>
+
+</Project>
