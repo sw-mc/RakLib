@@ -32,13 +32,175 @@ public abstract class Packet {
 	
 }
 
+public class EncapsulatedPacket {
+	
+	private const int RELIABILITY_SHIFT = 5;
+	private const int RELIABILITY_FLAGS = 0b111 << RELIABILITY_SHIFT;
+
+	private const int SPLIT_FLAG = 0b00010000;
+	
+	public int Reliability { get; set; }
+	public int? MessageIndex { get; set; }
+	public int SequenceIndex { get; set; }
+	public int OrderIndex { get; set; }
+	public int OrderChannel { get; set; }
+	public SplitPacketInfo? SplitPacket { get; set; } = null;
+	public byte[] Buffer { get; set; }
+
+	public static EncapsulatedPacket FromBinary(BinaryStream buffer) {
+		var packet = new EncapsulatedPacket();
+		var flags = buffer.ReadByte();
+		int reliability;
+		packet.Reliability = reliability = (flags & RELIABILITY_FLAGS) >> RELIABILITY_SHIFT;
+		var hasSplit = (flags & SPLIT_FLAG) > 0;
+		
+		var length = (int) Math.Ceiling(buffer.ReadShort() / 8.0);
+		if (length == 0) {
+			throw new BinaryDataException("Encapsulated packet length cannot be 0");
+		}
+
+		if (PacketReliability.IsReliable(reliability)) {
+			packet.MessageIndex = buffer.ReadLInt24();
+		}
+		
+		if (PacketReliability.IsSequenced(reliability)) {
+			packet.SequenceIndex = buffer.ReadLInt24();
+		}
+
+		if (PacketReliability.IsSequencedOrOrdered(reliability)) {
+			packet.OrderIndex = buffer.ReadLInt24();
+			packet.OrderChannel = buffer.ReadByte();
+		}
+
+		if (hasSplit) {
+			var count = buffer.ReadInt();
+			var id = buffer.ReadShort();
+			var index = buffer.ReadInt();
+			packet.SplitPacket = new SplitPacketInfo(id, index, count);
+		}
+		
+		packet.Buffer = buffer.ReadBytes(length);
+		return packet;
+	}
+	
+	public byte[] ToBinary() {
+		var buffer = new BinaryStream(new MemoryStream(GetTotalLength()));
+		var flags = 0;
+		flags |= Reliability << RELIABILITY_SHIFT;
+		if (SplitPacket != null) {
+			flags |= SPLIT_FLAG;
+		}
+		
+		buffer.WriteByte((byte) flags);
+		
+		var length = Buffer.Length;
+		buffer.WriteShort((short) (length * 8));
+		
+		if (PacketReliability.IsReliable(Reliability)) {
+			buffer.WriteLInt24(MessageIndex.Value);
+		}
+		
+		if (PacketReliability.IsSequenced(Reliability)) {
+			buffer.WriteLInt24(SequenceIndex);
+		}
+
+		if (PacketReliability.IsSequencedOrOrdered(Reliability)) {
+			buffer.WriteLInt24(OrderIndex);
+			buffer.WriteByte((byte) OrderChannel);
+		}
+
+		if (SplitPacket != null) {
+			buffer.WriteInt(SplitPacket.TotalPartCount);
+			buffer.WriteShort(SplitPacket.Id);
+			buffer.WriteInt(SplitPacket.PartIndex);
+		}
+		
+		buffer.WriteBytes(Buffer);
+		return buffer.GetBuffer();
+	}
+
+	public int GetTotalLength() {
+		return 
+			1 + //reliability
+			2 + //length
+			(PacketReliability.IsReliable(Reliability) ? 3 : 0) + //message index
+			(PacketReliability.IsSequenced(Reliability) ? 3 : 0) + //sequence index
+			(PacketReliability.IsSequencedOrOrdered(Reliability) ? 3 + 1 : 0) + // order index (3) + order channel (1)
+			(SplitPacket != null ? 4 + 2 + 4 : 0) + // split packet info (4) + split ID (2) + split index (4)
+			Buffer.Length;
+	}
+
+	public override string ToString() {
+		return Encoding.ASCII.GetString(ToBinary());
+	}
+
+}
+
+public class Datagram : Packet {
+
+	public const byte BITFLAG_VALID = 0x80;
+	public const byte BITFLAG_ACK = 0x40;
+	public const byte  BITFLAG_NAK = 0x20; // hasBAndAS for ACKs
+
+	/*
+	 * These flags can be set on regular datagrams, but they are useless as per the public version of RakNet
+	 * (the receiving client will not use them or pay any attention to them).
+	 */
+	public const byte BITFLAG_PACKET_PAIR = 0x10;
+	public const byte BITFLAG_CONTINUOUS_SEND = 0x08;
+	public const byte BITFLAG_NEEDS_B_AND_AS = 0x04;
+
+	public const byte HEADER_SIZE = 1 + 3; //header flags (1) + sequence number (3)
+
+	public byte HeaderFlags { get; set; }
+	public List<EncapsulatedPacket> Packets { get; set; } = new();
+	public Int24 SequenceNumber { get; set; }
+	
+	public override int GetPid() {
+		throw new NotImplementedException(); //NOOP
+	}
+	
+	protected new void EncodeHeader(PacketSerializer buffer) {
+		buffer.WriteByte(Convert.ToByte(BITFLAG_VALID | HeaderFlags));
+	}
+
+	protected override void EncodePayload(PacketSerializer buffer) {
+		buffer.WriteLInt24(SequenceNumber);
+		foreach (var packet in Packets) {
+			buffer.WriteBytes(packet.ToBinary());
+		}
+	}
+
+	public int Length {
+		get {
+			int length = HEADER_SIZE;
+			foreach (var packet in Packets) {
+				length += packet.GetTotalLength();
+			}
+			return length;
+		}
+	}
+	
+	protected new void DecodeHeader(PacketSerializer buffer) {
+		HeaderFlags = buffer.ReadByte();
+	}
+
+	protected override void DecodePayload(PacketSerializer buffer) {
+		SequenceNumber = buffer.ReadLInt24();
+		while (!buffer.Feof()) {
+			Packets.Add(EncapsulatedPacket.FromBinary(buffer));
+		}
+	}
+	
+}
+
 public sealed class SplitPacketInfo {
 	
-	private int Id { get; }
-	private int PartIndex { get; }
-	private int TotalPartCount { get; }
+	public short Id { get; }
+	public int PartIndex { get; }
+	public int TotalPartCount { get; }
 	
-	public SplitPacketInfo(int id, int partIndex, int totalPartCount) {
+	public SplitPacketInfo(short id, int partIndex, int totalPartCount) {
 		Id = id;
 		PartIndex = partIndex;
 		TotalPartCount = totalPartCount;
@@ -48,7 +210,7 @@ public sealed class SplitPacketInfo {
 
 public class PacketSerializer : BinaryStream {
 
-	public PacketSerializer(Stream stream) : base(stream) {
+	public PacketSerializer(MemoryStream stream) : base(stream) {
 	}
 
 	public string ReadString() {
@@ -103,6 +265,10 @@ public abstract class PacketReliability {
 
 	public static bool IsReliable(int reliability) {
 		return reliability is RELIABLE or RELIABLE_ORDERED or RELIABLE_SEQUENCED or RELIABLE_WITH_ACK_RECEIPT or RELIABLE_ORDERED_WITH_ACK_RECEIPT;
+	}
+
+	public static bool IsSequenced(int reliability) {
+		return reliability is UNRELIABLE_SEQUENCED or RELIABLE_SEQUENCED;
 	}
 	
 	public static bool IsOrdered(int reliability) {
