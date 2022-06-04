@@ -1,8 +1,7 @@
 ﻿using System.Text;
 using SkyWing.Binary;
-using SkyWing.RakLib;
 
-namespace RakLib.protocol;
+namespace SkyWing.RakLib.Protocol;
 
 public abstract class Packet {
 
@@ -46,6 +45,7 @@ public class EncapsulatedPacket {
 	public int OrderChannel { get; set; }
 	public SplitPacketInfo? SplitPacket { get; set; } = null;
 	public byte[] Buffer { get; set; }
+    public int? IdentifierAck { get; set; } = null;
 
 	public static EncapsulatedPacket FromBinary(BinaryStream buffer) {
 		var packet = new EncapsulatedPacket();
@@ -134,6 +134,19 @@ public class EncapsulatedPacket {
 		return Encoding.ASCII.GetString(ToBinary());
 	}
 
+    public EncapsulatedPacket Clone() {
+        return new EncapsulatedPacket {
+            Reliability = Reliability,
+            MessageIndex = MessageIndex,
+            SequenceIndex = SequenceIndex,
+            OrderIndex = OrderIndex,
+            OrderChannel = OrderChannel,
+            SplitPacket = SplitPacket,
+            Buffer = Buffer,
+            IdentifierAck = IdentifierAck
+        };
+    }
+
 }
 
 public class Datagram : Packet {
@@ -210,10 +223,16 @@ public sealed class SplitPacketInfo {
 
 public class PacketSerializer : BinaryStream {
 
-	public PacketSerializer(MemoryStream stream) : base(stream) {
-	}
+    public PacketSerializer(MemoryStream stream) : base(stream) {
+    }
+    
+    public PacketSerializer(byte[] buffer) : base(buffer) {
+    }
+    
+    public PacketSerializer() {
+    }
 
-	public string ReadString() {
+    public string ReadString() {
 		return Encoding.UTF8.GetString(ReadBytes(ReadShort()));
 	}
 	
@@ -663,4 +682,3 @@ sealed class MessageIdentifiers{
 	public const int ID_USER_PACKET_ENUM = 0x86;
 	//-------------------------------------------------------------------------------------------------------------
 }
-

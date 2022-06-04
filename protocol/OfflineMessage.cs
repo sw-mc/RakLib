@@ -1,7 +1,6 @@
 ﻿using SkyWing.Binary;
-using SkyWing.RakLib;
 
-namespace RakLib.protocol;
+namespace SkyWing.RakLib.Protocol;
 
 public abstract class OfflineMessage : Packet {
 	
@@ -33,7 +32,7 @@ public class IncompatibleProtocolVersion : OfflineMessage {
 		return MessageIdentifiers.ID_INCOMPATIBLE_PROTOCOL_VERSION;
 	}
 
-	public static IncompatibleProtocolVersion Create(int protocol, int server) {
+	public static IncompatibleProtocolVersion Create(int protocol, long server) {
 		return new IncompatibleProtocolVersion {
 			ProtocolVersion = protocol,
 			ServerId = server
@@ -43,7 +42,7 @@ public class IncompatibleProtocolVersion : OfflineMessage {
 	protected override void EncodePayload(PacketSerializer buffer) {
 		buffer.WriteByte((byte) ProtocolVersion);
 		WriteMagic(buffer);
-		buffer.WriteLong((byte) ServerId);
+		buffer.WriteLong(ServerId);
 	}
 
 	protected override void DecodePayload(PacketSerializer buffer) {

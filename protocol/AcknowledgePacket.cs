@@ -1,6 +1,6 @@
 ﻿using SkyWing.Binary;
 
-namespace RakLib.protocol;
+namespace SkyWing.RakLib.Protocol;
 
 public abstract class AcknowledgePacket : Packet {
 

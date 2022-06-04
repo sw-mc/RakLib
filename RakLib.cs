@@ -1,4 +1,4 @@
-﻿namespace RakLib; 
+﻿namespace SkyWing.RakLib; 
 
 public abstract class RakLib {
 

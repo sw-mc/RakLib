@@ -1,6 +1,4 @@
-﻿using SkyWing.RakLib;
-
-namespace RakLib.protocol;
+﻿namespace SkyWing.RakLib.Protocol;
 
 public abstract class ConnectedPacket : Packet {
 	

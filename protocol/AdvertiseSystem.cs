@@ -1,6 +1,4 @@
-﻿using System.Diagnostics.CodeAnalysis;
-
-namespace RakLib.protocol; 
+﻿namespace SkyWing.RakLib.Protocol; 
 
 public class AdvertiseSystem : Packet {
 	
