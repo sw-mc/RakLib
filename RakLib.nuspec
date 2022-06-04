@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package >
+  <metadata>
+    <id>SkyWing.RakLib</id>
+    <version>1.0.0-dev</version>
+    <title>RakLib</title>
+    <authors>Cosmic5173</authors>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <license type="expression">MIT</license>
+    <!-- <icon>icon.png</icon> -->
+    <projectUrl>https://github.com/sw-mc/RakLib</projectUrl>
+    <description>Basic RakNet server implementation in C#</description>
+      <releaseNotes/>
+    <copyright>Copyright 2022</copyright>
+    <tags>Multiplayer, Minecraft</tags>
+  </metadata>
+</package>
