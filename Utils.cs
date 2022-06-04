@@ -1,4 +1,6 @@
-﻿namespace SkyWing.RakLib;
+﻿using System.Net;
+
+namespace SkyWing.RakLib;
 
 // Wrapper class for internet address related data.
 public class InternetAddress {
@@ -19,13 +21,19 @@ public class InternetAddress {
 	private int _port;
 
 	public InternetVersion Version { get; }
-
-
+    
+    public IPAddress IpAddress => IPAddress.Parse(Ip);
 	public InternetAddress(string ip, int port, InternetVersion version) {
 		Ip = ip;
 		Port = port;
 		Version = version;
 	}
+    
+    public override string ToString() {
+        return $"{Ip}:{Port}";
+    }
+    
+    public InternetAddress Clone() => new InternetAddress(Ip, Port, Version);
 }
 
 public enum InternetVersion {
