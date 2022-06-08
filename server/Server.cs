@@ -3,6 +3,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Text.RegularExpressions;
 using SkyWing.Binary;
+using SkyWing.Logger;
 using SkyWing.RakLib.Generic;
 using SkyWing.RakLib.Protocol;
 using SkyWing.RakLib.server;
@@ -10,8 +11,19 @@ using SkyWing.RakLib.server;
 namespace SkyWing.RakLib.Server;
 
 public interface ServerInterface {
-	
-	
+
+    public void SendEncapsulated(int sessionId, EncapsulatedPacket packet, bool immediate = false);
+
+    public void SendRaw(string address, int port, byte[] payload);
+
+    public void CloseSession(int sessionId);
+
+    public void BlockAddress(string address, int timeout = 300);
+
+    public void UnblockAddress(string address);
+
+    public void AddRawPacketFilter(string regex);
+    
 }
 
 public class Server : ServerInterface {
@@ -20,6 +32,8 @@ public class Server : ServerInterface {
     private const int RAKLIB_TIME_PER_TICK = 1 / RAKLIB_TPS;
 
     protected RakNetSocket Socket { get; }
+    
+    public SimpleLogger Logger { get; }
     private bool SocketError { get; set; } = false;
     public long ServerId { get; }
 
@@ -56,7 +70,7 @@ public class Server : ServerInterface {
     public ServerEventListener ServerEventListener { get; }
     public ServerEventSource ServerEventSource { get; }
 
-    public Server(long serverId, RakNetSocket socket, int maxMtuSize, ProtocolAcceptor protocolAcceptor,
+    public Server(SimpleLogger logger, long serverId, RakNetSocket socket, int maxMtuSize, ProtocolAcceptor protocolAcceptor,
         ServerEventSource serverEventSource, ServerEventListener serverEventListener) {
         if (maxMtuSize < Session.MIN_MTU_SIZE) {
             throw new ArgumentException("MaxMtuSize must be at least " + Session.MIN_MTU_SIZE + ", got " + maxMtuSize);
@@ -64,6 +78,7 @@ public class Server : ServerInterface {
 
         ServerId = serverId;
         Socket = socket;
+        Logger = logger;
         MaxMtuSize = maxMtuSize;
         ServerEventSource = serverEventSource;
         ServerEventListener = serverEventListener;
@@ -208,9 +223,7 @@ public class Server : ServerInterface {
                         else if (session.Connected) {
                             //allows unconnected packets if the session is stuck in DISCONNECTING state, useful if the client
                             //didn't disconnect properly for some reason (e.g. crash)
-                            /*this.logger.debug(
-                                "Ignored unconnected packet from address due to session already opened (0x"
-                                    .bin2hex(buffer[0]). ")");*/
+                            Logger.Debug("Ignored unconnected packet from address due to session already opened.");
                             return;
                         }
                     }
@@ -225,26 +238,10 @@ public class Server : ServerInterface {
                     }
 
                     if (!handled) {
-                        /*this.logger.debug(
-                                "Ignored packet from address due to no session opened (0x".bin2hex(buffer[0]). ")");*/
+                        Logger.Debug("Ignored packet from address due to no session opened.");
                     }
                 }
                 catch (BinaryDataException e) {
-                    /*logFn = function() use(address, e, buffer) : void {
-                        this.logger.debug("Packet from address (".length(buffer). " bytes): 0x".bin2hex(buffer));
-                        this.logger.debug(
-                            get_class(e). ": ".e.getMessage(). " in ".e.getFile(). " on line ".e.getLine());
-                        foreach (this.traceCleaner.getTrace(0, e.getTrace()) as line){
-                            this.logger.debug(line);
-                        }
-                        this.logger.error("Bad packet from address: ".e.getMessage());
-                    }
-                    ;
-                    if (this.logger instanceof \BufferedLogger){
-                        this.logger.buffer(logFn);
-                    }else{
-                        logFn();
-                    }*/
                     BlockAddress(address.ToString(), 5);
                 }
             },
@@ -264,7 +261,7 @@ public class Server : ServerInterface {
 		try{
 			SendBytes += await Socket.WritePacket(outgoing.GetBuffer(), address.IpAddress, address.Port);
 		}catch(SocketException e){
-			//this.logger.debug(e.getMessage());
+			Logger.Debug(e.Message);
 		}
 	}
 
@@ -279,7 +276,7 @@ public class Server : ServerInterface {
 		try{
 			await Socket.WritePacket(payload, IPAddress.Parse(address), port);
 		}catch(SocketException e){
-			//this.logger.debug(e.getMessage());
+            Logger.Debug(e.Message);
 		}
 	}
 
@@ -289,13 +286,13 @@ public class Server : ServerInterface {
 		}
 	}
 
-    private void BlockAddress(string address, int timeout = 300) {
+    public void BlockAddress(string address, int timeout = 300) {
 		var final = new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds() + timeout;
 		if(!Block.ContainsKey(address) || timeout == -1){
 			if(timeout == -1){
 				final = Int64.MaxValue;
 			}else{
-				//this.logger.notice("Blocked address for timeout seconds");
+				Logger.Notice($"Blocked {address} for timeout seconds");
 			}
 			Block[address] = final;
 		}else if(Block[address] < final){
@@ -305,7 +302,7 @@ public class Server : ServerInterface {
 
 	public void UnblockAddress(string address) {
         Block.Remove(address);
-        //this.logger.debug("Unblocked address");
+        Logger.Debug($"Unblocked {address}");
     }
 
 	public void AddRawPacketFilter(string regex) {
@@ -332,10 +329,10 @@ public class Server : ServerInterface {
 		var existingSession = GetSession(address) ?? null;
 		if(existingSession != null){
 			existingSession.ForciblyDisconnect("client reconnect");
-			this.RemoveSessionInternal(existingSession);
+			RemoveSessionInternal(existingSession);
 		}
 
-		this.CheckSessions();
+		CheckSessions();
 
 		while(Sessions.ContainsKey(NextSessionId)){
 			NextSessionId++;
@@ -345,7 +342,7 @@ public class Server : ServerInterface {
 		var session = new Session(this, address.Clone(), clientId, mtuSize, NextSessionId);
 		IpAddressToSessionId[address.ToString()] = NextSessionId;
 		Sessions[NextSessionId] = session;
-		//this.logger.debug("Created session for address with MTU size mtuSize");
+		Logger.Debug($"Created session for {address} with MTU size {mtuSize}");
 
 		return session;
 	}
@@ -372,7 +369,7 @@ public class Server : ServerInterface {
     }
 
     public void NotifyAck(Session session, int identifierAck) {
-		this.ServerEventListener.OnPacketAck(session.InternalId, identifierAck);
+		ServerEventListener.OnPacketAck(session.InternalId, identifierAck);
 	}
     
 }
@@ -415,9 +412,10 @@ public class UnconnectedMessageHandler {
         if(packet.GetType() == typeof(UnconnectedPing)){
 			server.SendPacket(UnconnectedPong.Create(((UnconnectedPong) packet).SendPingTime, server.ServerId, server.Name), address);
 		}else if(packet.GetType() == typeof(OpenConnectionRequest1)){
-			if(!protocolAcceptor.Accepts(((OpenConnectionRequest1)packet).Protocol)){
+            var protocol = ((OpenConnectionRequest1)packet).Protocol;
+			if(!protocolAcceptor.Accepts(protocol)){
 				server.SendPacket(IncompatibleProtocolVersion.Create(this.protocolAcceptor.GetPrimaryVersion(), server.ServerId), address);
-				//this.server.getLogger().notice("Refused connection from address due to incompatible RakNet protocol version (version packet.protocol)");
+				server.Logger.Notice($"Refused connection from {address} due to incompatible RakNet protocol version (version {protocol})");
 			}else{
 				//IP header size (20 bytes) + UDP header size (8 bytes)
 				server.SendPacket(OpenConnectionReply1.Create(server.ServerId, false, (short) (((OpenConnectionRequest2)packet).MtuSize + 28)), address);
@@ -432,14 +430,14 @@ public class UnconnectedMessageHandler {
 				if(existingSession is {Connected: true}){
 					//for redundancy, in case someone rips up Server - we really don't want connected sessions getting
 					//overwritten
-					//server.getLogger().debug("Not creating session for address due to session already opened");
+					server.Logger.Debug($"Not creating session for {address} due to session already opened");
 					return true;
 				}
 				var mtuSize = (short) Math.Min(((OpenConnectionRequest2)packet).MtuSize, server.MaxMtuSize); //Max size, do not allow creating large buffers to fill server memory
 				server.SendPacket(OpenConnectionReply2.Create(this.server.ServerId, address, mtuSize, false), address);
 				server.CreateSession(address, ((OpenConnectionRequest2)packet).ClientId, mtuSize);
 			}else{
-				//this.server.getLogger().debug("Not creating session for address due to mismatched port, expected " . this.server.getPort() . ", got " . packet.serverAddress.getPort());
+				server.Logger.Debug($"Not creating session for {address} due to mismatched port, expected " + server.Port + ", got " + ((OpenConnectionRequest2)packet).ServerAddress.Port);
 			}
 		}else{
 			return false;
