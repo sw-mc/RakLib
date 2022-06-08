@@ -18,6 +18,12 @@ public interface ServerInterface {
 
     public void CloseSession(int sessionId);
 
+    public void SetName(string name);
+
+    public void SetPortCheck(bool portCheck);
+
+    public void SetPacketsPerTickLimit(long limit);
+
     public void BlockAddress(string address, int timeout = 300);
 
     public void UnblockAddress(string address);
@@ -46,7 +52,7 @@ public class Server : ServerInterface {
     protected UnconnectedMessageHandler UnconnectedMessageHandler { get; }
     public string Name { get; set; }
 
-    public int PacketLimit { get; set; } = 200;
+    public long PacketLimit { get; set; } = 200;
     
     protected bool Shutdown { get; set; }
 
@@ -113,6 +119,12 @@ public class Server : ServerInterface {
         }
 
     }
+
+    public void SetName(string name) => Name = name;
+
+    public void SetPortCheck(bool portCheck) => PortChecking = portCheck;
+
+    public void SetPacketsPerTickLimit(long limit) => PacketLimit = limit;
 
     public void WaitShutdown() {
         Shutdown = true;
@@ -477,7 +489,7 @@ public interface ServerEventListener {
 
 	public void OnPacketAck(int sessionId, int identifierAck);
 
-	public void OnBandwidthStatsUpdate(int bytesSentDiff, int bytesReceivedDiff);
+	public void OnBandwidthStatsUpdate(long bytesSentDiff, long bytesReceivedDiff);
 
 	public void OnPingMeasure(int sessionId, long pingMs);
 	
