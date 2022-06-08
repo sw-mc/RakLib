@@ -88,6 +88,8 @@ public class Server : ServerInterface {
                 ReceivePacket();
             }
         } while (stream || !SocketError);
+        
+        Tick();
 
         var time = new DateTimeOffset(DateTime.UtcNow).ToUnixTimeMilliseconds() - start;
         if (time < RAKLIB_TIME_PER_TICK) {
