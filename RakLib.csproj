@@ -6,7 +6,7 @@
         <Nullable>enable</Nullable>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <PackageId>SkyWing.RakLib</PackageId>
-        <PackageVersion>1.1.0-dev</PackageVersion>
+        <PackageVersion>1.2.0-dev</PackageVersion>
         <Title>RakLib</Title>
         <Authors>Cosmic5173</Authors>
         <Description>A basic RakNet server implementation in C#.</Description>
