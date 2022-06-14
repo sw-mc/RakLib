@@ -1,4 +1,5 @@
-﻿using System.Net;
+﻿using System.Diagnostics;
+using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -35,7 +36,7 @@ public interface ServerInterface {
 public class Server : ServerInterface {
 
     private const int RAKLIB_TPS = 100;
-    private const int RAKLIB_TIME_PER_TICK = 1 / RAKLIB_TPS;
+    private const int RAKLIB_TIME_PER_TICK = 1000 / 100;
 
     protected RakNetSocket Socket { get; }
     
@@ -57,6 +58,7 @@ public class Server : ServerInterface {
     protected bool Shutdown { get; set; }
 
     protected int TickCounter { get; set; }
+    private Stopwatch TickTimer { get; }
 
     protected Dictionary<string, long> Block { get; } = new();
     protected Dictionary<string, int> IpSec { get; } = new();
@@ -91,13 +93,16 @@ public class Server : ServerInterface {
 
         StartTimeMs = new DateTimeOffset(DateTime.UtcNow).ToUnixTimeMilliseconds();
         UnconnectedMessageHandler = new UnconnectedMessageHandler(this, protocolAcceptor);
+
+        TickTimer = new Stopwatch();
+        TickTimer.Start();
     }
     
     public long RakNetTimeMs => new DateTimeOffset(DateTime.UtcNow).ToUnixTimeMilliseconds() - StartTimeMs;
 
     public void TickProcessor() {
 
-        var start = new DateTimeOffset(DateTime.UtcNow).ToUnixTimeMilliseconds();
+        var start = TickTimer.ElapsedMilliseconds; //1000
         var stream = !Shutdown;
 
         do {
@@ -112,10 +117,9 @@ public class Server : ServerInterface {
         
         Tick();
 
-        var time = new DateTimeOffset(DateTime.UtcNow).ToUnixTimeMilliseconds() - start;
+        var time = TickTimer.ElapsedMilliseconds - start; 
         if (time < RAKLIB_TIME_PER_TICK) {
-            Thread.Sleep((int) (new DateTimeOffset(DateTime.UtcNow).ToUnixTimeMilliseconds() + RAKLIB_TIME_PER_TICK -
-                                time));
+            Thread.Sleep((int) (RAKLIB_TIME_PER_TICK - time));
         }
 
     }
@@ -185,8 +189,8 @@ public class Server : ServerInterface {
         ++TickCounter;
     }
 
-    private void ReceivePacket() {
-        Socket.ReadPacket(delegate(byte[] bytes, IPAddress a, int port) {
+    private async void ReceivePacket() {
+        await Socket.ReadPacket(delegate(byte[] bytes, IPAddress a, int port) {
                 if (bytes.Length <= 0) {
                     SocketError = true; return;
                 }
