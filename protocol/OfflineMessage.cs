@@ -19,7 +19,7 @@ public abstract class OfflineMessage : Packet {
 	}
 
 	public bool IsValid() {
-		return Magic != null && Magic.Equals(magic);
+        return Magic != null && Magic.SequenceEqual(magic!);
 	}
 }
 
@@ -231,8 +231,8 @@ public class UnconnectedPong : OfflineMessage {
 	}
 
 	protected override void EncodePayload(PacketSerializer buffer) {
-		buffer.WriteLong((byte) SendPingTime);
-		buffer.WriteLong((byte) ServerId);
+		buffer.WriteLong(SendPingTime);
+		buffer.WriteLong(ServerId);
 		WriteMagic(buffer);
 		buffer.WriteString(ServerName);
 	}

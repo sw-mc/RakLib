@@ -58,7 +58,7 @@
 
     <ItemGroup>
         <PackageReference Include="SkyWing.Logger" Version="1.0.0" />
-        <PackageReference Include="SkyWing.Binary" Version="1.0.0-dev" />
+        <PackageReference Include="SkyWing.Binary" Version="1.0.1-dev" />
     </ItemGroup>
 
 </Project>

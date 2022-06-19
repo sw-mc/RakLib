@@ -23,6 +23,8 @@ public class InternetAddress {
 	public InternetVersion Version { get; }
     
     public IPAddress IpAddress => IPAddress.Parse(Ip);
+    public IPEndPoint IpEndPoint => new(IpAddress, Port);
+    
 	public InternetAddress(string ip, int port, InternetVersion version) {
 		Ip = ip;
 		Port = port;

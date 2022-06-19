@@ -41,7 +41,7 @@ public class Server : ServerInterface {
     protected RakNetSocket Socket { get; }
     
     public SimpleLogger Logger { get; }
-    private bool SocketError { get; set; } = false;
+    private bool SocketError { get; set; }
     public long ServerId { get; }
 
     protected int ReceivedBytes { get; set; }
@@ -51,7 +51,7 @@ public class Server : ServerInterface {
     protected readonly Dictionary<int, Session> Sessions = new();
 
     protected UnconnectedMessageHandler UnconnectedMessageHandler { get; }
-    public string Name { get; set; }
+    public string? Name { get; set; }
 
     public long PacketLimit { get; set; } = 200;
     
@@ -102,7 +102,7 @@ public class Server : ServerInterface {
 
     public void TickProcessor() {
 
-        var start = TickTimer.ElapsedMilliseconds; //1000
+        var start = TickTimer.ElapsedMilliseconds;
         var stream = !Shutdown;
 
         do {
@@ -139,8 +139,8 @@ public class Server : ServerInterface {
             //race conditions.
         }
 
-        foreach (var keyValuePair in Sessions) {
-            //TODO: Start disconnect
+        foreach (var (_, session) in Sessions) {
+            session.InitiateDisconnect("server shutdown");
         }
 
         while (Sessions.Count > 0) {
@@ -148,7 +148,7 @@ public class Server : ServerInterface {
         }
         
         Socket.Close();
-        //TODO: Log graceful shutdown
+        Logger.Debug("Graceful shutdown complete");
     }
 
     private void Tick() {
@@ -162,7 +162,7 @@ public class Server : ServerInterface {
 
         IpSec.Clear();
 
-        if(!Shutdown && (TickCounter % RAKLIB_TPS) == 0){
+        if(!Shutdown && TickCounter % RAKLIB_TPS == 0){
             if(SendBytes > 0 || ReceivedBytes > 0){
                 ServerEventListener.OnBandwidthStatsUpdate(SendBytes, ReceivedBytes);
                 SendBytes = ReceivedBytes = 0;
@@ -189,12 +189,13 @@ public class Server : ServerInterface {
         ++TickCounter;
     }
 
-    private async void ReceivePacket() {
-        await Socket.ReadPacket(delegate(byte[] bytes, IPAddress a, int port) {
+    private void ReceivePacket() {
+        Socket.ReadPacket(delegate(byte[] bytes, IPAddress a, int port) {
                 if (bytes.Length <= 0) {
-                    SocketError = true; return;
+                    SocketError = true;
+                    return;
                 }
-                var address = new InternetAddress(a.ToString(), port, this.Socket.BindAddress.Version);
+                var address = new InternetAddress(a.ToString(), port, Socket.BindAddress.Version);
                 var len = bytes.Length;
 
                 ReceivedBytes += len;
@@ -236,7 +237,7 @@ public class Server : ServerInterface {
                             session.HandlePacket(packet);
                             return;
                         }
-                        else if (session.Connected) {
+                        if (session.Connected) {
                             //allows unconnected packets if the session is stuck in DISCONNECTING state, useful if the client
                             //didn't disconnect properly for some reason (e.g. crash)
                             Logger.Debug("Ignored unconnected packet from address due to session already opened.");
@@ -261,21 +262,17 @@ public class Server : ServerInterface {
                     BlockAddress(address.ToString(), 5);
                 }
             },
-            delegate(SocketException exception) {
-                if (exception.SocketErrorCode == System.Net.Sockets.SocketError.ConnectionReset) {
-                }
-                else {
-                    SocketError = true;
-                    //TODO: Log error
-                }
+            delegate(Exception exception) {
+                SocketError = true;
+                
             });
     }
 
-    public async void SendPacket(Packet packet, InternetAddress address) {
+    public void SendPacket(Packet packet, InternetAddress address) {
 		var outgoing = new PacketSerializer(); //TODO: reusable streams to reduce allocations
-		packet.Encode(outgoing);
-		try{
-			SendBytes += await Socket.WritePacket(outgoing.GetBuffer(), address.IpAddress, address.Port);
+		packet.Encode(outgoing); 
+        try{
+            SendBytes += Socket.WritePacket(outgoing.GetBuffer(), address.IpAddress, address.Port);
 		}catch(SocketException e){
 			Logger.Debug(e.Message);
 		}
@@ -288,9 +285,9 @@ public class Server : ServerInterface {
 		}
 	}
 
-	public async void SendRaw(string address, int port, byte[] payload) {
+	public void SendRaw(string address, int port, byte[] payload) {
 		try{
-			await Socket.WritePacket(payload, IPAddress.Parse(address), port);
+			Socket.WritePacket(payload, IPAddress.Parse(address), port);
 		}catch(SocketException e){
             Logger.Debug(e.Message);
 		}
@@ -425,21 +422,22 @@ public class UnconnectedMessageHandler {
     }
 
     private bool Handle(OfflineMessage packet, InternetAddress address) {
-        if(packet.GetType() == typeof(UnconnectedPing)){
-			server.SendPacket(UnconnectedPong.Create(((UnconnectedPong) packet).SendPingTime, server.ServerId, server.Name), address);
-		}else if(packet.GetType() == typeof(OpenConnectionRequest1)){
+        if (packet.GetType() == typeof(UnconnectedPing)) {
+            server.SendPacket(UnconnectedPong.Create(((UnconnectedPing) packet).SendPingTime, server.ServerId,
+                (server.Name ?? "")[..(server.Name!.LastIndexOf(';') + 1)]), address);
+        }else if(packet.GetType() == typeof(OpenConnectionRequest1)){
             var protocol = ((OpenConnectionRequest1)packet).Protocol;
 			if(!protocolAcceptor.Accepts(protocol)){
-				server.SendPacket(IncompatibleProtocolVersion.Create(this.protocolAcceptor.GetPrimaryVersion(), server.ServerId), address);
+				server.SendPacket(IncompatibleProtocolVersion.Create(protocolAcceptor.GetPrimaryVersion(), server.ServerId), address);
 				server.Logger.Notice($"Refused connection from {address} due to incompatible RakNet protocol version (version {protocol})");
 			}else{
 				//IP header size (20 bytes) + UDP header size (8 bytes)
-				server.SendPacket(OpenConnectionReply1.Create(server.ServerId, false, (short) (((OpenConnectionRequest2)packet).MtuSize + 28)), address);
+				server.SendPacket(OpenConnectionReply1.Create(server.ServerId, false, (short) (((OpenConnectionRequest1)packet).MtuSize + 28)), address);
 			}
 		}else if(packet.GetType() == typeof(OpenConnectionRequest2)){
 			if(((OpenConnectionRequest2)packet).ServerAddress.Port == server.Port || !server.PortChecking){
 				if(((OpenConnectionRequest2)packet).MtuSize < Session.MIN_MTU_SIZE){
-					//this.server.getLogger().debug("Not creating session for address due to bad MTU size packet.mtuSize");
+					server.Logger.Debug("Not creating session for address due to bad MTU size packet.mtuSize");
 					return true;
 				}
 				var existingSession = server.GetSession(address);
@@ -476,8 +474,12 @@ public class UnconnectedMessageHandler {
     }
 
     private void RegisterPackets() {
-        packetPool = new Dictionary<int, Type>();
-        
+        packetPool = new Dictionary<int, Type> {
+            {MessageIdentifiers.ID_UNCONNECTED_PING, typeof(UnconnectedPing)},
+            {MessageIdentifiers.ID_UNCONNECTED_PING_OPEN_CONNECTIONS, typeof(UnconnectedPingOpenConnections)},
+            {MessageIdentifiers.ID_OPEN_CONNECTION_REQUEST_1, typeof(OpenConnectionRequest1)},
+            {MessageIdentifiers.ID_OPEN_CONNECTION_REQUEST_2, typeof(OpenConnectionRequest2)}
+        };
     }
 }
 

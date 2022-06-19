@@ -242,14 +242,14 @@ public class PacketSerializer : BinaryStream {
 	}
 
 	public InternetAddress ReadAddress() {
-		var version = Reader.ReadByte();
+		var version = ReadByte();
 
 		if (version != 4)
 			throw new BinaryDataException("Unknown address version " + version);
 
-		var address = ((~Reader.ReadByte()) & 0xff) + "." + ((~Reader.ReadByte()) & 0xff) + "." + ((~Reader.ReadByte()) & 0xff) + "." +
-		              ((~Reader.ReadByte()) & 0xff);
-		var port = Reader.ReadInt16();
+		var address = ((~ReadByte()) & 0xff) + "." + ((~ReadByte()) & 0xff) + "." + ((~ReadByte()) & 0xff) + "." +
+		              ((~ReadByte()) & 0xff);
+		var port = ReadShort();
 
 		return new InternetAddress(address, port, InternetVersion.Ipv4);
 		//TODO: IVP6
